@@ -1,11 +1,13 @@
 import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  applyDecisions,
   buildResultWorkbook,
   buildUpdatedBase,
   downloadBlob,
   parseRawFile,
   parseRulesBase,
   processRows,
+  type Group,
   type ProcessResult,
   type RulesMap,
 } from "./lib/rules";
@@ -27,22 +29,32 @@ export default function App() {
   const [rules, setRules] = useState<RulesMap | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [decisions, setDecisions] = useState<Map<string, boolean>>(new Map());
-  const [tab, setTab] = useState<"marcados" | "normais" | "pendentes">("pendentes");
+  const [tab, setTab] = useState<"marcados" | "normais" | "pendentes" | "completo">("pendentes");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
   const searchNorm = search.trim().toUpperCase();
 
+  const displayResult = useMemo(() => (result ? applyDecisions(result, decisions) : null), [result, decisions]);
+
+  const combinedGroups = useMemo((): (Group & { highlight: boolean })[] => {
+    if (!displayResult) return [];
+    return [
+      ...displayResult.marcados.map((g) => ({ ...g, highlight: true })),
+      ...displayResult.normais.map((g) => ({ ...g, highlight: false })),
+    ].sort((a, b) => a.ncm.localeCompare(b.ncm));
+  }, [displayResult]);
+
   const filteredPendentes = useMemo(() => {
-    if (!result) return [];
-    if (!searchNorm) return result.pendentes;
-    return result.pendentes.filter(
+    if (!displayResult) return [];
+    if (!searchNorm) return displayResult.pendentes;
+    return displayResult.pendentes.filter(
       (p) => p.ncm.toUpperCase().includes(searchNorm) || p.item.toUpperCase().includes(searchNorm)
     );
-  }, [result, searchNorm]);
+  }, [displayResult, searchNorm]);
 
-  function filterGroups(groups: ProcessResult["marcados"]) {
+  function filterGroups<T extends { ncm: string; items: { item: string }[] }>(groups: T[]): T[] {
     if (!searchNorm) return groups;
     return groups
       .map((g) => {
@@ -51,19 +63,19 @@ export default function App() {
         if (items.length === 0) return null;
         return { ...g, items };
       })
-      .filter((g): g is ProcessResult["marcados"][number] => g !== null);
+      .filter((g): g is T => g !== null);
   }
 
   const totals = useMemo(() => {
-    if (!result) return null;
+    if (!displayResult) return null;
     const sum = (arr: { contabil: number; icms: number }[]) =>
       arr.reduce((acc, g) => ({ contabil: acc.contabil + g.contabil, icms: acc.icms + g.icms }), { contabil: 0, icms: 0 });
     return {
-      marcados: sum(result.marcados),
-      normais: sum(result.normais),
-      pendentes: sum(result.pendentes),
+      marcados: sum(displayResult.marcados),
+      normais: sum(displayResult.normais),
+      pendentes: sum(displayResult.pendentes),
     };
-  }, [result]);
+  }, [displayResult]);
 
   async function handleProcess() {
     if (!baseFile || !rawFile) return;
@@ -95,8 +107,8 @@ export default function App() {
   }
 
   async function handleDownloadResult() {
-    if (!result) return;
-    const blob = await buildResultWorkbook(result, decisions);
+    if (!displayResult) return;
+    const blob = await buildResultWorkbook(displayResult);
     downloadBlob(blob, "Resultado_Processado.xlsx");
   }
 
@@ -181,7 +193,7 @@ export default function App() {
           )}
         </div>
 
-        {result && totals && (
+        {displayResult && totals && (
           <section className="mt-8">
             <div className="flex justify-end mb-4">
               <button
@@ -194,21 +206,21 @@ export default function App() {
             <div className="flex flex-wrap gap-4 mb-6">
               <SummaryCard
                 label="Marcados · alíquota zero"
-                count={result.marcados.length}
+                count={displayResult.marcados.length}
                 contabil={totals.marcados.contabil}
                 icms={totals.marcados.icms}
                 accent={GOLD}
               />
               <SummaryCard
                 label="Conhecidos · normais"
-                count={result.normais.length}
+                count={displayResult.normais.length}
                 contabil={totals.normais.contabil}
                 icms={totals.normais.icms}
                 accent={NAVY}
               />
               <SummaryCard
                 label="Pendentes reais"
-                count={result.pendentes.length}
+                count={displayResult.pendentes.length}
                 contabil={totals.pendentes.contabil}
                 icms={totals.pendentes.icms}
                 accent="#e11d48"
@@ -238,11 +250,14 @@ export default function App() {
                 <TabButton active={tab === "pendentes"} onClick={() => setTab("pendentes")}>
                   Pendentes ({filteredPendentes.length})
                 </TabButton>
+                <TabButton active={tab === "completo"} onClick={() => setTab("completo")}>
+                  Completo ({filterGroups(combinedGroups).length})
+                </TabButton>
                 <TabButton active={tab === "marcados"} onClick={() => setTab("marcados")}>
-                  Marcados ({filterGroups(result.marcados).length})
+                  Marcados ({filterGroups(displayResult.marcados).length})
                 </TabButton>
                 <TabButton active={tab === "normais"} onClick={() => setTab("normais")}>
-                  Conhecidos-Normais ({filterGroups(result.normais).length})
+                  Conhecidos-Normais ({filterGroups(displayResult.normais).length})
                 </TabButton>
               </div>
 
@@ -308,8 +323,11 @@ export default function App() {
                   </div>
                 )}
 
-                {tab === "marcados" && <GroupTable groups={filterGroups(result.marcados)} highlight />}
-                {tab === "normais" && <GroupTable groups={filterGroups(result.normais)} />}
+                {tab === "completo" && (
+                  <GroupTable groups={filterGroups(combinedGroups)} highlight={(g) => g.highlight} />
+                )}
+                {tab === "marcados" && <GroupTable groups={filterGroups(displayResult.marcados)} highlight />}
+                {tab === "normais" && <GroupTable groups={filterGroups(displayResult.normais)} />}
               </div>
 
               <div className="p-6 bg-slate-50 flex flex-wrap gap-3 border-t border-slate-100">
@@ -441,8 +459,15 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function GroupTable({ groups, highlight }: { groups: ProcessResult["marcados"]; highlight?: boolean }) {
+function GroupTable<T extends Group>({
+  groups,
+  highlight,
+}: {
+  groups: T[];
+  highlight?: boolean | ((g: T) => boolean);
+}) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const isHighlighted = (g: T) => (typeof highlight === "function" ? highlight(g) : !!highlight);
 
   function toggle(ncm: string) {
     setCollapsed((prev) => {
@@ -483,7 +508,7 @@ function GroupTable({ groups, highlight }: { groups: ProcessResult["marcados"]; 
                 <tr
                   onClick={() => toggle(g.ncm)}
                   className="border-t border-slate-100 font-semibold cursor-pointer select-none"
-                  style={highlight ? { background: "rgba(240,180,41,0.25)" } : { background: "#f8fafc" }}
+                  style={isHighlighted(g) ? { background: "rgba(240,180,41,0.25)" } : { background: "#f8fafc" }}
                 >
                   <td className="px-3 py-2 text-slate-800">
                     <span className="inline-flex items-center gap-2">

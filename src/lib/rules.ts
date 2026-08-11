@@ -151,6 +151,47 @@ export function processRows(rawRows: RawRow[], rules: RulesMap): ProcessResult {
   };
 }
 
+function mergeGroups(groups: Group[], extra: PendingRow[]): Group[] {
+  const map = new Map<string, Group>();
+  for (const g of groups) map.set(norm(g.ncm), { ncm: g.ncm, contabil: g.contabil, icms: g.icms, items: g.items.map((it) => ({ ...it })) });
+  for (const p of extra) {
+    const gk = norm(p.ncm);
+    let group = map.get(gk);
+    if (!group) {
+      group = { ncm: p.ncm, contabil: 0, icms: 0, items: [] };
+      map.set(gk, group);
+    }
+    group.contabil += p.contabil;
+    group.icms += p.icms;
+    let item = group.items.find((it) => norm(it.item) === norm(p.item));
+    if (!item) {
+      item = { item: p.item, contabil: 0, icms: 0 };
+      group.items.push(item);
+    }
+    item.contabil += p.contabil;
+    item.icms += p.icms;
+  }
+  return [...map.values()].sort((a, b) => a.ncm.localeCompare(b.ncm));
+}
+
+export function applyDecisions(result: ProcessResult, decisions: Map<string, boolean>): ProcessResult {
+  if (decisions.size === 0) return result;
+  const stillPending: PendingRow[] = [];
+  const newMarcados: PendingRow[] = [];
+  const newNormais: PendingRow[] = [];
+  for (const p of result.pendentes) {
+    const decision = decisions.get(key(p.ncm, p.item));
+    if (decision === undefined) stillPending.push(p);
+    else if (decision) newMarcados.push(p);
+    else newNormais.push(p);
+  }
+  return {
+    marcados: mergeGroups(result.marcados, newMarcados),
+    normais: mergeGroups(result.normais, newNormais),
+    pendentes: stillPending.sort((a, b) => a.ncm.localeCompare(b.ncm) || a.item.localeCompare(b.item)),
+  };
+}
+
 const HEADER_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1A1A1A" } };
 const YELLOW_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
 
@@ -208,7 +249,7 @@ function addCombinedSheet(wb: ExcelJS.Workbook, marcados: Group[], normais: Grou
   ws.getColumn("icms").numFmt = "#,##0.00";
 }
 
-export async function buildResultWorkbook(result: ProcessResult, pendingDecisions: Map<string, boolean>): Promise<Blob> {
+export async function buildResultWorkbook(result: ProcessResult): Promise<Blob> {
   const wb = new ExcelJS.Workbook();
   addCombinedSheet(wb, result.marcados, result.normais);
   addGroupSheet(wb, "Marcados", result.marcados, true);
@@ -220,13 +261,10 @@ export async function buildResultWorkbook(result: ProcessResult, pendingDecision
     { header: "Item", key: "item", width: 55 },
     { header: "Soma Valor Contábil", key: "contabil", width: 20 },
     { header: "Soma Valor ICMS", key: "icms", width: 18 },
-    { header: "Decisão", key: "decisao", width: 14 },
   ];
   styleHeader(wsP);
   for (const p of result.pendentes) {
-    const decided = pendingDecisions.get(`${norm(p.ncm)}|${norm(p.item)}`);
-    const decisaoLabel = decided === undefined ? "" : decided ? "SIM (amarelo)" : "NÃO (normal)";
-    wsP.addRow({ ncm: p.ncm, item: p.item, contabil: p.contabil, icms: p.icms, decisao: decisaoLabel });
+    wsP.addRow({ ncm: p.ncm, item: p.item, contabil: p.contabil, icms: p.icms });
   }
   wsP.getColumn("contabil").numFmt = "#,##0.00";
   wsP.getColumn("icms").numFmt = "#,##0.00";
