@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   buildResultWorkbook,
   buildUpdatedBase,
@@ -9,6 +9,9 @@ import {
   type ProcessResult,
   type RulesMap,
 } from "./lib/rules";
+
+const NAVY = "#020D2F";
+const GOLD = "#F0B429";
 
 function money(n: number) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -83,187 +86,262 @@ export default function App() {
   const decidedCount = decisions.size;
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <div className="max-w-5xl mx-auto px-6 py-10">
-        <header className="mb-8">
-          <h1 className="text-2xl font-semibold">NCM Alíquota Zero</h1>
-          <p className="text-neutral-400 mt-1">
-            Envie a base de regras e a planilha de PIS/COFINS. O app marca os NCM+Item já conhecidos e devolve os
-            pendentes para você classificar.
+    <div
+      className="min-h-screen flex flex-col font-sans text-slate-900"
+      style={{ background: "#f7f5ef" }}
+    >
+      {/* Header */}
+      <header className="text-white relative" style={{ background: NAVY, boxShadow: "0 12px 32px -12px rgba(2,13,47,0.45)" }}>
+        <div
+          className="absolute inset-x-0 bottom-0 h-[3px]"
+          style={{ background: `linear-gradient(90deg, transparent, ${GOLD} 20%, ${GOLD} 80%, transparent)` }}
+        />
+        <div className="max-w-5xl mx-auto px-6 pt-8 pb-14 flex items-center gap-5">
+          <img src="/logo.png" alt="Contador de Padarias" className="h-16 object-contain" />
+          <div className="hidden md:block w-px h-12 bg-white/15" />
+          <div>
+            <h1 className="font-serif text-3xl font-semibold tracking-tight text-white mb-0.5">NCM Alíquota Zero</h1>
+            <p className="font-medium text-[0.95rem]" style={{ color: "rgba(240,180,41,0.8)" }}>
+              Classificação automática de PIS/COFINS por NCM + Item
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-6 -mt-8 relative z-10 flex-1 w-full pb-12">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10">
+          <p className="text-slate-500 text-sm mb-6 max-w-2xl">
+            Envie a base de regras já conhecida e a planilha do período. O app cruza NCM + Item, separa o que já tem
+            regra (alíquota zero ou normal) e devolve os pendentes para você classificar.
           </p>
-        </header>
 
-        <section className="grid md:grid-cols-2 gap-4 mb-6">
-          <FileDrop
-            label="1. Base de Regras (NCM + Item)"
-            hint="Arquivo com colunas NCM, Item, Alíquota Zero (Amarelo)"
-            file={baseFile}
-            onSelect={setBaseFile}
-          />
-          <FileDrop
-            label="2. Planilha para processar"
-            hint="Arquivo com colunas NCM, Item, Valor Contábil, Valor ICMS"
-            file={rawFile}
-            onSelect={setRawFile}
-          />
-        </section>
+          <div className="grid md:grid-cols-2 gap-5 mb-6">
+            <FileDrop
+              step="1"
+              label="Base de Regras"
+              hint="Colunas: NCM, Item, Alíquota Zero (Amarelo)"
+              file={baseFile}
+              onSelect={setBaseFile}
+            />
+            <FileDrop
+              step="2"
+              label="Planilha do período"
+              hint="Colunas: NCM, Item, Valor Contábil, Valor ICMS"
+              file={rawFile}
+              onSelect={setRawFile}
+            />
+          </div>
 
-        <button
-          onClick={handleProcess}
-          disabled={!baseFile || !rawFile || loading}
-          className="rounded-lg bg-amber-400 text-neutral-950 font-medium px-5 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-amber-300 transition"
-        >
-          {loading ? "Processando..." : "Processar"}
-        </button>
+          <div className="flex flex-col items-center">
+            <button
+              onClick={handleProcess}
+              disabled={!baseFile || !rawFile || loading}
+              className="flex items-center gap-3 px-10 py-4 text-white rounded-xl font-bold transition-all active:scale-95 hover:scale-[1.02] shadow-xl disabled:opacity-40 disabled:grayscale disabled:hover:scale-100"
+              style={{ background: NAVY }}
+            >
+              {loading ? "Processando..." : "Processar planilha"}
+            </button>
+          </div>
 
-        {error && (
-          <p className="mt-4 text-red-400 text-sm border border-red-900 bg-red-950/40 rounded-lg px-4 py-3">{error}</p>
-        )}
+          {error && (
+            <p className="mt-4 text-rose-700 text-sm border border-rose-200 bg-rose-50 rounded-xl px-4 py-3">{error}</p>
+          )}
+        </div>
 
         {result && totals && (
-          <section className="mt-10">
-            <div className="flex flex-wrap gap-3 mb-6">
+          <section className="mt-8">
+            <div className="flex flex-wrap gap-4 mb-6">
               <SummaryCard
-                label="Marcados (alíquota zero)"
+                label="Marcados · alíquota zero"
                 count={result.marcados.length}
                 contabil={totals.marcados.contabil}
                 icms={totals.marcados.icms}
-                color="bg-yellow-400 text-neutral-950"
+                accent={GOLD}
               />
               <SummaryCard
-                label="Conhecidos - normais"
+                label="Conhecidos · normais"
                 count={result.normais.length}
                 contabil={totals.normais.contabil}
                 icms={totals.normais.icms}
-                color="bg-neutral-800 text-neutral-100"
+                accent={NAVY}
               />
               <SummaryCard
                 label="Pendentes reais"
                 count={result.pendentes.length}
                 contabil={totals.pendentes.contabil}
                 icms={totals.pendentes.icms}
-                color="bg-rose-950 text-rose-200 border border-rose-800"
+                accent="#e11d48"
               />
             </div>
 
-            <div className="flex gap-2 mb-4 border-b border-neutral-800">
-              <TabButton active={tab === "pendentes"} onClick={() => setTab("pendentes")}>
-                Pendentes ({result.pendentes.length})
-              </TabButton>
-              <TabButton active={tab === "marcados"} onClick={() => setTab("marcados")}>
-                Marcados ({result.marcados.length})
-              </TabButton>
-              <TabButton active={tab === "normais"} onClick={() => setTab("normais")}>
-                Conhecidos-Normais ({result.normais.length})
-              </TabButton>
-            </div>
-
-            {tab === "pendentes" && (
-              <div className="overflow-x-auto rounded-lg border border-neutral-800">
-                <table className="w-full text-sm">
-                  <thead className="bg-neutral-900 text-neutral-400">
-                    <tr>
-                      <th className="text-left px-3 py-2">NCM</th>
-                      <th className="text-left px-3 py-2">Item</th>
-                      <th className="text-right px-3 py-2">Valor Contábil</th>
-                      <th className="text-right px-3 py-2">Valor ICMS</th>
-                      <th className="text-center px-3 py-2">Classificar</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.pendentes.map((p) => {
-                      const k = normKey(p.ncm, p.item);
-                      const decision = decisions.get(k);
-                      return (
-                        <tr key={k} className="border-t border-neutral-800">
-                          <td className="px-3 py-2 whitespace-nowrap">{p.ncm}</td>
-                          <td className="px-3 py-2">{p.item}</td>
-                          <td className="px-3 py-2 text-right">{money(p.contabil)}</td>
-                          <td className="px-3 py-2 text-right">{money(p.icms)}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex justify-center gap-1">
-                              <button
-                                onClick={() => setDecision(p.ncm, p.item, true)}
-                                className={`px-2 py-1 rounded text-xs ${
-                                  decision === true ? "bg-yellow-400 text-neutral-950" : "bg-neutral-800 text-neutral-300"
-                                }`}
-                              >
-                                Alíquota zero
-                              </button>
-                              <button
-                                onClick={() => setDecision(p.ncm, p.item, false)}
-                                className={`px-2 py-1 rounded text-xs ${
-                                  decision === false ? "bg-neutral-200 text-neutral-950" : "bg-neutral-800 text-neutral-300"
-                                }`}
-                              >
-                                Normal
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {result.pendentes.length === 0 && (
-                  <p className="px-3 py-6 text-center text-neutral-500">Nenhuma pendência — tudo já está na base.</p>
-                )}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+              <div className="flex gap-1 px-4 pt-4 border-b border-slate-100">
+                <TabButton active={tab === "pendentes"} onClick={() => setTab("pendentes")}>
+                  Pendentes ({result.pendentes.length})
+                </TabButton>
+                <TabButton active={tab === "marcados"} onClick={() => setTab("marcados")}>
+                  Marcados ({result.marcados.length})
+                </TabButton>
+                <TabButton active={tab === "normais"} onClick={() => setTab("normais")}>
+                  Conhecidos-Normais ({result.normais.length})
+                </TabButton>
               </div>
-            )}
 
-            {tab === "marcados" && <GroupTable groups={result.marcados} highlight />}
-            {tab === "normais" && <GroupTable groups={result.normais} />}
+              <div className="p-4">
+                {tab === "pendentes" && (
+                  <div className="overflow-x-auto rounded-xl border border-slate-100">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-500">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold">NCM</th>
+                          <th className="text-left px-3 py-2 font-semibold">Item</th>
+                          <th className="text-right px-3 py-2 font-semibold">Valor Contábil</th>
+                          <th className="text-right px-3 py-2 font-semibold">Valor ICMS</th>
+                          <th className="text-center px-3 py-2 font-semibold">Classificar</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.pendentes.map((p) => {
+                          const k = normKey(p.ncm, p.item);
+                          const decision = decisions.get(k);
+                          return (
+                            <tr key={k} className="border-t border-slate-100">
+                              <td className="px-3 py-2 whitespace-nowrap text-slate-700">{p.ncm}</td>
+                              <td className="px-3 py-2 text-slate-700">{p.item}</td>
+                              <td className="px-3 py-2 text-right text-slate-600">{money(p.contabil)}</td>
+                              <td className="px-3 py-2 text-right text-slate-600">{money(p.icms)}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex justify-center gap-1">
+                                  <button
+                                    onClick={() => setDecision(p.ncm, p.item, true)}
+                                    className="px-2.5 py-1 rounded-full text-xs font-semibold transition"
+                                    style={
+                                      decision === true
+                                        ? { background: GOLD, color: NAVY }
+                                        : { background: "#f1f5f9", color: "#64748b" }
+                                    }
+                                  >
+                                    Alíquota zero
+                                  </button>
+                                  <button
+                                    onClick={() => setDecision(p.ncm, p.item, false)}
+                                    className="px-2.5 py-1 rounded-full text-xs font-semibold transition"
+                                    style={
+                                      decision === false
+                                        ? { background: NAVY, color: "#fff" }
+                                        : { background: "#f1f5f9", color: "#64748b" }
+                                    }
+                                  >
+                                    Normal
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {result.pendentes.length === 0 && (
+                      <p className="px-3 py-6 text-center text-slate-400">Nenhuma pendência — tudo já está na base.</p>
+                    )}
+                  </div>
+                )}
 
-            <div className="flex flex-wrap gap-3 mt-6">
-              <button
-                onClick={handleDownloadResult}
-                className="rounded-lg border border-neutral-700 px-4 py-2 text-sm hover:bg-neutral-900 transition"
-              >
-                Baixar resultado processado (.xlsx)
-              </button>
-              <button
-                onClick={handleDownloadUpdatedBase}
-                disabled={decidedCount === 0}
-                className="rounded-lg bg-amber-400 text-neutral-950 px-4 py-2 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-amber-300 transition"
-              >
-                Baixar base atualizada com {decidedCount} nova(s) regra(s)
-              </button>
+                {tab === "marcados" && <GroupTable groups={result.marcados} highlight />}
+                {tab === "normais" && <GroupTable groups={result.normais} />}
+              </div>
+
+              <div className="p-6 bg-slate-50 flex flex-wrap gap-3 border-t border-slate-100">
+                <button
+                  onClick={handleDownloadResult}
+                  className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 transition-all active:scale-95"
+                >
+                  Baixar resultado processado
+                </button>
+                <button
+                  onClick={handleDownloadUpdatedBase}
+                  disabled={decidedCount === 0}
+                  className="flex items-center gap-2 px-6 py-3 text-white rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:grayscale"
+                  style={{ background: NAVY }}
+                >
+                  Baixar base atualizada ({decidedCount} nova(s) regra(s))
+                </button>
+              </div>
             </div>
           </section>
         )}
-      </div>
+      </main>
+
+      <footer className="p-8 text-center" style={{ background: NAVY }}>
+        <img src="/simbolo.png" alt="Contador de Padarias" className="h-8 object-contain mx-auto opacity-70" />
+      </footer>
     </div>
   );
 }
 
 function FileDrop({
+  step,
   label,
   hint,
   file,
   onSelect,
 }: {
+  step: string;
   label: string;
   hint: string;
   file: File | null;
   onSelect: (f: File) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  function handleFile(f: File | undefined) {
+    if (f) onSelect(f);
+  }
+
   return (
-    <label className="block rounded-xl border border-dashed border-neutral-700 hover:border-amber-400/60 transition p-5 cursor-pointer">
-      <span className="block font-medium mb-1">{label}</span>
-      <span className="block text-xs text-neutral-500 mb-3">{hint}</span>
+    <div
+      onClick={() => inputRef.current?.click()}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        handleFile(e.dataTransfer.files?.[0]);
+      }}
+      className="relative group border-2 border-dashed rounded-2xl p-6 cursor-pointer transition-all"
+      style={{
+        borderColor: dragOver ? GOLD : "#e2e8f0",
+        background: dragOver ? "rgba(240,180,41,0.06)" : "#fff",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span
+          className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+          style={{ background: NAVY }}
+        >
+          {step}
+        </span>
+        <span className="font-bold text-slate-800">{label}</span>
+      </div>
+      <p className="text-slate-500 text-xs mb-3 pl-7">{hint}</p>
       <input
+        ref={inputRef}
         type="file"
         accept=".xlsx,.xls"
         className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onSelect(f);
-        }}
+        onChange={(e) => handleFile(e.target.files?.[0])}
       />
-      <span className="inline-block text-xs rounded-full bg-neutral-800 px-3 py-1">
+      <span
+        className="inline-block ml-7 text-xs font-medium rounded-full px-3 py-1"
+        style={file ? { background: "rgba(240,180,41,0.15)", color: "#8a6412" } : { background: "#f1f5f9", color: "#64748b" }}
+      >
         {file ? file.name : "Selecionar arquivo..."}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -272,20 +350,20 @@ function SummaryCard({
   count,
   contabil,
   icms,
-  color,
+  accent,
 }: {
   label: string;
   count: number;
   contabil: number;
   icms: number;
-  color: string;
+  accent: string;
 }) {
   return (
-    <div className={`rounded-lg px-4 py-3 min-w-[220px] flex-1 ${color}`}>
-      <p className="text-xs uppercase tracking-wide opacity-80">{label}</p>
-      <p className="text-lg font-semibold">{count} NCM</p>
-      <p className="text-xs opacity-80">Contábil: R$ {money(contabil)}</p>
-      <p className="text-xs opacity-80">ICMS: R$ {money(icms)}</p>
+    <div className="rounded-2xl px-5 py-4 min-w-[220px] flex-1 bg-white shadow-md border-l-4" style={{ borderLeftColor: accent }}>
+      <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">{label}</p>
+      <p className="text-xl font-bold text-slate-800">{count} NCM</p>
+      <p className="text-xs text-slate-500">Contábil: R$ {money(contabil)}</p>
+      <p className="text-xs text-slate-500">ICMS: R$ {money(icms)}</p>
     </div>
   );
 }
@@ -294,9 +372,8 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm -mb-px border-b-2 transition ${
-        active ? "border-amber-400 text-neutral-100" : "border-transparent text-neutral-500 hover:text-neutral-300"
-      }`}
+      className="px-4 py-2.5 text-sm font-semibold -mb-px border-b-2 transition"
+      style={active ? { borderColor: GOLD, color: NAVY } : { borderColor: "transparent", color: "#94a3b8" }}
     >
       {children}
     </button>
@@ -305,35 +382,35 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 function GroupTable({ groups, highlight }: { groups: ProcessResult["marcados"]; highlight?: boolean }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-800">
+    <div className="overflow-x-auto rounded-xl border border-slate-100">
       <table className="w-full text-sm">
-        <thead className="bg-neutral-900 text-neutral-400">
+        <thead className="bg-slate-50 text-slate-500">
           <tr>
-            <th className="text-left px-3 py-2">NCM / Item</th>
-            <th className="text-right px-3 py-2">Valor Contábil</th>
-            <th className="text-right px-3 py-2">Valor ICMS</th>
+            <th className="text-left px-3 py-2 font-semibold">NCM / Item</th>
+            <th className="text-right px-3 py-2 font-semibold">Valor Contábil</th>
+            <th className="text-right px-3 py-2 font-semibold">Valor ICMS</th>
           </tr>
         </thead>
         <tbody>
           {groups.map((g) => (
             <Fragment key={g.ncm}>
-              <tr className={`border-t border-neutral-800 font-medium ${highlight ? "bg-yellow-400/90 text-neutral-950" : "bg-neutral-900"}`}>
-                <td className="px-3 py-2">{g.ncm}</td>
-                <td className="px-3 py-2 text-right">{money(g.contabil)}</td>
-                <td className="px-3 py-2 text-right">{money(g.icms)}</td>
+              <tr className="border-t border-slate-100 font-semibold" style={highlight ? { background: "rgba(240,180,41,0.25)" } : { background: "#f8fafc" }}>
+                <td className="px-3 py-2 text-slate-800">{g.ncm}</td>
+                <td className="px-3 py-2 text-right text-slate-800">{money(g.contabil)}</td>
+                <td className="px-3 py-2 text-right text-slate-800">{money(g.icms)}</td>
               </tr>
               {g.items.map((it) => (
-                <tr key={g.ncm + it.item} className="border-t border-neutral-900">
-                  <td className="px-3 py-2 pl-8 text-neutral-300">{it.item}</td>
-                  <td className="px-3 py-2 text-right text-neutral-400">{money(it.contabil)}</td>
-                  <td className="px-3 py-2 text-right text-neutral-400">{money(it.icms)}</td>
+                <tr key={g.ncm + it.item} className="border-t border-slate-50">
+                  <td className="px-3 py-2 pl-8 text-slate-600">{it.item}</td>
+                  <td className="px-3 py-2 text-right text-slate-500">{money(it.contabil)}</td>
+                  <td className="px-3 py-2 text-right text-slate-500">{money(it.icms)}</td>
                 </tr>
               ))}
             </Fragment>
           ))}
           {groups.length === 0 && (
             <tr>
-              <td colSpan={3} className="px-3 py-6 text-center text-neutral-500">
+              <td colSpan={3} className="px-3 py-6 text-center text-slate-400">
                 Nada aqui.
               </td>
             </tr>
