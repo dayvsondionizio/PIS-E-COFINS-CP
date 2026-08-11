@@ -135,6 +135,7 @@ export default function App() {
   }
 
   const decidedCount = decisions.size;
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   function handleReset() {
     setBaseFile(null);
@@ -146,6 +147,7 @@ export default function App() {
     setError(null);
     setEmpresa("");
     setCompetencia("");
+    setShowResetConfirm(false);
   }
 
   return (
@@ -244,7 +246,7 @@ export default function App() {
           <section className="mt-8">
             <div className="flex justify-end mb-4">
               <button
-                onClick={handleReset}
+                onClick={() => setShowResetConfirm(true)}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-rose-700 border border-rose-200 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all active:scale-95"
               >
                 Nova apuração (limpar dados)
@@ -407,6 +409,45 @@ export default function App() {
       <footer className="p-8 text-center" style={{ background: NAVY }}>
         <img src="/simbolo.png" alt="Contador de Padarias" className="h-8 object-contain mx-auto opacity-70" />
       </footer>
+
+      {showResetConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(2,13,47,0.55)" }}
+          onClick={() => setShowResetConfirm(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-serif text-xl font-semibold text-slate-900 mb-2">Você já baixou os arquivos?</h2>
+            <p className="text-sm text-slate-600 mb-1">
+              "Nova apuração" apaga tudo da tela — planilhas, classificações e resultado. Nada fica salvo em
+              lugar nenhum.
+            </p>
+            {decidedCount > 0 && (
+              <p className="text-sm font-semibold rounded-xl px-3 py-2 mt-3" style={{ background: "rgba(240,180,41,0.15)", color: "#8a6412" }}>
+                Você classificou {decidedCount} pendente(s) e ainda não baixou a base atualizada — essas
+                regras novas serão perdidas se continuar sem baixar.
+              </p>
+            )}
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+              >
+                Cancelar, quero baixar antes
+              </button>
+              <button
+                onClick={handleReset}
+                className="px-5 py-2.5 rounded-xl font-semibold text-sm text-white bg-rose-600 hover:bg-rose-700 transition"
+              >
+                Já baixei, limpar tudo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
