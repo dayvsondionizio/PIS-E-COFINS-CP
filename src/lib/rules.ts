@@ -181,8 +181,36 @@ function addGroupSheet(wb: ExcelJS.Workbook, title: string, groups: Group[], hig
   ws.getColumn("icms").numFmt = "#,##0.00";
 }
 
+function addCombinedSheet(wb: ExcelJS.Workbook, marcados: Group[], normais: Group[]) {
+  const ws = wb.addWorksheet("Apuração Completa");
+  ws.columns = [
+    { header: "NCM", key: "ncm", width: 16 },
+    { header: "Item", key: "item", width: 55 },
+    { header: "Soma Valor Contábil", key: "contabil", width: 20 },
+    { header: "Soma Valor ICMS", key: "icms", width: 18 },
+  ];
+  styleHeader(ws);
+
+  const combined = [
+    ...marcados.map((g) => ({ group: g, highlight: true })),
+    ...normais.map((g) => ({ group: g, highlight: false })),
+  ].sort((a, b) => a.group.ncm.localeCompare(b.group.ncm));
+
+  for (const { group: g, highlight } of combined) {
+    const totalRow = ws.addRow({ ncm: g.ncm, item: "", contabil: g.contabil, icms: g.icms });
+    totalRow.font = { bold: true };
+    if (highlight) totalRow.eachCell((c) => (c.fill = YELLOW_FILL));
+    for (const it of g.items) {
+      ws.addRow({ ncm: "", item: it.item, contabil: it.contabil, icms: it.icms });
+    }
+  }
+  ws.getColumn("contabil").numFmt = "#,##0.00";
+  ws.getColumn("icms").numFmt = "#,##0.00";
+}
+
 export async function buildResultWorkbook(result: ProcessResult, pendingDecisions: Map<string, boolean>): Promise<Blob> {
   const wb = new ExcelJS.Workbook();
+  addCombinedSheet(wb, result.marcados, result.normais);
   addGroupSheet(wb, "Marcados", result.marcados, true);
   addGroupSheet(wb, "Conhecidos-Normais", result.normais, false);
 
