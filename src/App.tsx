@@ -23,6 +23,20 @@ function normKey(ncm: string, item: string) {
   return `${ncm.trim().toUpperCase()}|${item.trim().toUpperCase()}`;
 }
 
+function slugFilePart(s: string) {
+  return s
+    .trim()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function buildFileName(base: string, empresa: string, competencia: string) {
+  const parts = [base, slugFilePart(empresa), slugFilePart(competencia)].filter(Boolean);
+  return `${parts.join("_")}.xlsx`;
+}
+
 export default function App() {
   const [baseFile, setBaseFile] = useState<File | null>(null);
   const [rawFile, setRawFile] = useState<File | null>(null);
@@ -33,6 +47,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [empresa, setEmpresa] = useState("");
+  const [competencia, setCompetencia] = useState("");
 
   const searchNorm = search.trim().toUpperCase();
 
@@ -109,13 +125,13 @@ export default function App() {
   async function handleDownloadResult() {
     if (!displayResult) return;
     const blob = await buildResultWorkbook(displayResult);
-    downloadBlob(blob, "Resultado_Processado.xlsx");
+    downloadBlob(blob, buildFileName("Resultado_Processado", empresa, competencia));
   }
 
   async function handleDownloadUpdatedBase() {
     if (!result || !rules) return;
     const blob = await buildUpdatedBase(rules, result.pendentes, decisions);
-    downloadBlob(blob, "Base_Regras_Atualizada.xlsx");
+    downloadBlob(blob, buildFileName("Base_Regras_Atualizada", empresa, competencia));
   }
 
   const decidedCount = decisions.size;
@@ -128,6 +144,8 @@ export default function App() {
     setDecisions(new Map());
     setTab("pendentes");
     setError(null);
+    setEmpresa("");
+    setCompetencia("");
   }
 
   return (
@@ -159,6 +177,35 @@ export default function App() {
             Envie a base de regras já conhecida e a planilha do período. O app cruza NCM + Item, separa o que já tem
             regra (alíquota zero ou normal) e devolve os pendentes para você classificar.
           </p>
+
+          <div className="grid md:grid-cols-2 gap-5 mb-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                Nome da empresa
+              </label>
+              <input
+                type="text"
+                value={empresa}
+                onChange={(e) => setEmpresa(e.target.value)}
+                placeholder="Ex: Gugel, Vila Amizade Matriz..."
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none"
+                style={{ boxShadow: empresa ? `0 0 0 2px rgba(240,180,41,0.3)` : undefined }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                Mês de competência
+              </label>
+              <input
+                type="text"
+                value={competencia}
+                onChange={(e) => setCompetencia(e.target.value)}
+                placeholder="Ex: 01-2026"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none"
+                style={{ boxShadow: competencia ? `0 0 0 2px rgba(240,180,41,0.3)` : undefined }}
+              />
+            </div>
+          </div>
 
           <div className="grid md:grid-cols-2 gap-5 mb-6">
             <FileDrop
@@ -331,20 +378,26 @@ export default function App() {
               </div>
 
               <div className="p-6 bg-slate-50 flex flex-wrap gap-3 border-t border-slate-100">
-                <button
-                  onClick={handleDownloadResult}
-                  className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 transition-all active:scale-95"
-                >
-                  Baixar resultado processado
-                </button>
-                <button
-                  onClick={handleDownloadUpdatedBase}
-                  disabled={decidedCount === 0}
-                  className="flex items-center gap-2 px-6 py-3 text-white rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:grayscale"
-                  style={{ background: NAVY }}
-                >
-                  Baixar base atualizada ({decidedCount} nova(s) regra(s))
-                </button>
+                <div>
+                  <button
+                    onClick={handleDownloadResult}
+                    className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 transition-all active:scale-95"
+                  >
+                    Baixar resultado processado
+                  </button>
+                  <p className="text-[11px] text-slate-400 mt-1 pl-1">{buildFileName("Resultado_Processado", empresa, competencia)}</p>
+                </div>
+                <div>
+                  <button
+                    onClick={handleDownloadUpdatedBase}
+                    disabled={decidedCount === 0}
+                    className="flex items-center gap-2 px-6 py-3 text-white rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:grayscale"
+                    style={{ background: NAVY }}
+                  >
+                    Baixar base atualizada ({decidedCount} nova(s) regra(s))
+                  </button>
+                  <p className="text-[11px] text-slate-400 mt-1 pl-1">{buildFileName("Base_Regras_Atualizada", empresa, competencia)}</p>
+                </div>
               </div>
             </div>
           </section>
