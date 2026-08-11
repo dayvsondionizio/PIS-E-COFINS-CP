@@ -30,6 +30,29 @@ export default function App() {
   const [tab, setTab] = useState<"marcados" | "normais" | "pendentes">("pendentes");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const searchNorm = search.trim().toUpperCase();
+
+  const filteredPendentes = useMemo(() => {
+    if (!result) return [];
+    if (!searchNorm) return result.pendentes;
+    return result.pendentes.filter(
+      (p) => p.ncm.toUpperCase().includes(searchNorm) || p.item.toUpperCase().includes(searchNorm)
+    );
+  }, [result, searchNorm]);
+
+  function filterGroups(groups: ProcessResult["marcados"]) {
+    if (!searchNorm) return groups;
+    return groups
+      .map((g) => {
+        if (g.ncm.toUpperCase().includes(searchNorm)) return g;
+        const items = g.items.filter((it) => it.item.toUpperCase().includes(searchNorm));
+        if (items.length === 0) return null;
+        return { ...g, items };
+      })
+      .filter((g): g is ProcessResult["marcados"][number] => g !== null);
+  }
 
   const totals = useMemo(() => {
     if (!result) return null;
@@ -84,6 +107,16 @@ export default function App() {
   }
 
   const decidedCount = decisions.size;
+
+  function handleReset() {
+    setBaseFile(null);
+    setRawFile(null);
+    setRules(null);
+    setResult(null);
+    setDecisions(new Map());
+    setTab("pendentes");
+    setError(null);
+  }
 
   return (
     <div
@@ -150,6 +183,14 @@ export default function App() {
 
         {result && totals && (
           <section className="mt-8">
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={handleReset}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-rose-700 border border-rose-200 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all active:scale-95"
+              >
+                Nova apuração (limpar dados)
+              </button>
+            </div>
             <div className="flex flex-wrap gap-4 mb-6">
               <SummaryCard
                 label="Marcados · alíquota zero"
@@ -175,15 +216,33 @@ export default function App() {
             </div>
 
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-              <div className="flex gap-1 px-4 pt-4 border-b border-slate-100">
+              <div className="flex flex-wrap items-center gap-3 px-4 pt-4">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Pesquisar por NCM ou nome do item..."
+                  className="flex-1 min-w-[220px] rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2"
+                  style={{ boxShadow: search ? `0 0 0 2px rgba(240,180,41,0.3)` : undefined }}
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1"
+                  >
+                    Limpar busca
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-1 px-4 pt-3 border-b border-slate-100">
                 <TabButton active={tab === "pendentes"} onClick={() => setTab("pendentes")}>
-                  Pendentes ({result.pendentes.length})
+                  Pendentes ({filteredPendentes.length})
                 </TabButton>
                 <TabButton active={tab === "marcados"} onClick={() => setTab("marcados")}>
-                  Marcados ({result.marcados.length})
+                  Marcados ({filterGroups(result.marcados).length})
                 </TabButton>
                 <TabButton active={tab === "normais"} onClick={() => setTab("normais")}>
-                  Conhecidos-Normais ({result.normais.length})
+                  Conhecidos-Normais ({filterGroups(result.normais).length})
                 </TabButton>
               </div>
 
@@ -201,7 +260,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {result.pendentes.map((p) => {
+                        {filteredPendentes.map((p) => {
                           const k = normKey(p.ncm, p.item);
                           const decision = decisions.get(k);
                           return (
@@ -241,14 +300,16 @@ export default function App() {
                         })}
                       </tbody>
                     </table>
-                    {result.pendentes.length === 0 && (
-                      <p className="px-3 py-6 text-center text-slate-400">Nenhuma pendência — tudo já está na base.</p>
+                    {filteredPendentes.length === 0 && (
+                      <p className="px-3 py-6 text-center text-slate-400">
+                        {search ? "Nenhum resultado para essa busca." : "Nenhuma pendência — tudo já está na base."}
+                      </p>
                     )}
                   </div>
                 )}
 
-                {tab === "marcados" && <GroupTable groups={result.marcados} highlight />}
-                {tab === "normais" && <GroupTable groups={result.normais} />}
+                {tab === "marcados" && <GroupTable groups={filterGroups(result.marcados)} highlight />}
+                {tab === "normais" && <GroupTable groups={filterGroups(result.normais)} />}
               </div>
 
               <div className="p-6 bg-slate-50 flex flex-wrap gap-3 border-t border-slate-100">
@@ -381,8 +442,31 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 }
 
 function GroupTable({ groups, highlight }: { groups: ProcessResult["marcados"]; highlight?: boolean }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggle(ncm: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(ncm)) next.delete(ncm);
+      else next.add(ncm);
+      return next;
+    });
+  }
+
+  const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.ncm));
+
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-100">
+      {groups.length > 0 && (
+        <div className="flex justify-end px-3 py-2 border-b border-slate-100 bg-slate-50/60">
+          <button
+            onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.ncm)))}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+          >
+            {allCollapsed ? "Expandir tudo" : "Recolher tudo"}
+          </button>
+        </div>
+      )}
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-500">
           <tr>
@@ -392,22 +476,40 @@ function GroupTable({ groups, highlight }: { groups: ProcessResult["marcados"]; 
           </tr>
         </thead>
         <tbody>
-          {groups.map((g) => (
-            <Fragment key={g.ncm}>
-              <tr className="border-t border-slate-100 font-semibold" style={highlight ? { background: "rgba(240,180,41,0.25)" } : { background: "#f8fafc" }}>
-                <td className="px-3 py-2 text-slate-800">{g.ncm}</td>
-                <td className="px-3 py-2 text-right text-slate-800">{money(g.contabil)}</td>
-                <td className="px-3 py-2 text-right text-slate-800">{money(g.icms)}</td>
-              </tr>
-              {g.items.map((it) => (
-                <tr key={g.ncm + it.item} className="border-t border-slate-50">
-                  <td className="px-3 py-2 pl-8 text-slate-600">{it.item}</td>
-                  <td className="px-3 py-2 text-right text-slate-500">{money(it.contabil)}</td>
-                  <td className="px-3 py-2 text-right text-slate-500">{money(it.icms)}</td>
+          {groups.map((g) => {
+            const isCollapsed = collapsed.has(g.ncm);
+            return (
+              <Fragment key={g.ncm}>
+                <tr
+                  onClick={() => toggle(g.ncm)}
+                  className="border-t border-slate-100 font-semibold cursor-pointer select-none"
+                  style={highlight ? { background: "rgba(240,180,41,0.25)" } : { background: "#f8fafc" }}
+                >
+                  <td className="px-3 py-2 text-slate-800">
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] bg-white/70 text-slate-600 shrink-0"
+                        aria-hidden
+                      >
+                        {isCollapsed ? "▸" : "▾"}
+                      </span>
+                      {g.ncm}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right text-slate-800">{money(g.contabil)}</td>
+                  <td className="px-3 py-2 text-right text-slate-800">{money(g.icms)}</td>
                 </tr>
-              ))}
-            </Fragment>
-          ))}
+                {!isCollapsed &&
+                  g.items.map((it) => (
+                    <tr key={g.ncm + it.item} className="border-t border-slate-50">
+                      <td className="px-3 py-2 pl-10 text-slate-600">{it.item}</td>
+                      <td className="px-3 py-2 text-right text-slate-500">{money(it.contabil)}</td>
+                      <td className="px-3 py-2 text-right text-slate-500">{money(it.icms)}</td>
+                    </tr>
+                  ))}
+              </Fragment>
+            );
+          })}
           {groups.length === 0 && (
             <tr>
               <td colSpan={3} className="px-3 py-6 text-center text-slate-400">
