@@ -177,7 +177,7 @@ export default function App() {
         <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10">
           <p className="text-slate-500 text-sm mb-6 max-w-2xl">
             Envie a base de regras já conhecida e a planilha do período. O app cruza NCM + Item, separa o que já tem
-            regra (alíquota zero ou normal) e devolve os pendentes para você classificar.
+            regra (alíquota zero ou tributado) e devolve os pendentes para você classificar.
           </p>
 
           <div className="grid md:grid-cols-2 gap-5 mb-6">
@@ -261,7 +261,7 @@ export default function App() {
                 accent={GOLD}
               />
               <SummaryCard
-                label="Conhecidos · normais"
+                label="Conhecidos · tributado"
                 count={displayResult.normais.length}
                 contabil={totals.normais.contabil}
                 icms={totals.normais.icms}
@@ -306,7 +306,7 @@ export default function App() {
                   Marcados ({filterGroups(displayResult.marcados).length})
                 </TabButton>
                 <TabButton active={tab === "normais"} onClick={() => setTab("normais")}>
-                  Conhecidos-Normais ({filterGroups(displayResult.normais).length})
+                  Conhecidos-Tributado ({filterGroups(displayResult.normais).length})
                 </TabButton>
               </div>
 
@@ -355,7 +355,7 @@ export default function App() {
                                         : { background: "#f1f5f9", color: "#64748b" }
                                     }
                                   >
-                                    Normal
+                                    Tributado
                                   </button>
                                 </div>
                               </td>
@@ -373,10 +373,31 @@ export default function App() {
                 )}
 
                 {tab === "completo" && (
-                  <GroupTable groups={filterGroups(combinedGroups)} highlight={(g) => g.highlight} />
+                  <GroupTable
+                    groups={filterGroups(combinedGroups)}
+                    highlight={(g) => g.highlight}
+                    decisions={decisions}
+                    onUndo={(ncm, item) => setDecision(ncm, item, undefined)}
+                    onSwitch={(ncm, item, value) => setDecision(ncm, item, value)}
+                  />
                 )}
-                {tab === "marcados" && <GroupTable groups={filterGroups(displayResult.marcados)} highlight />}
-                {tab === "normais" && <GroupTable groups={filterGroups(displayResult.normais)} />}
+                {tab === "marcados" && (
+                  <GroupTable
+                    groups={filterGroups(displayResult.marcados)}
+                    highlight
+                    decisions={decisions}
+                    onUndo={(ncm, item) => setDecision(ncm, item, undefined)}
+                    onSwitch={(ncm, item, value) => setDecision(ncm, item, value)}
+                  />
+                )}
+                {tab === "normais" && (
+                  <GroupTable
+                    groups={filterGroups(displayResult.normais)}
+                    decisions={decisions}
+                    onUndo={(ncm, item) => setDecision(ncm, item, undefined)}
+                    onSwitch={(ncm, item, value) => setDecision(ncm, item, value)}
+                  />
+                )}
               </div>
 
               <div className="p-6 bg-slate-50 flex flex-wrap gap-3 border-t border-slate-100">
@@ -556,9 +577,15 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 function GroupTable<T extends Group>({
   groups,
   highlight,
+  decisions,
+  onUndo,
+  onSwitch,
 }: {
   groups: T[];
   highlight?: boolean | ((g: T) => boolean);
+  decisions?: Map<string, boolean>;
+  onUndo?: (ncm: string, item: string) => void;
+  onSwitch?: (ncm: string, item: string, value: boolean) => void;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const isHighlighted = (g: T) => (typeof highlight === "function" ? highlight(g) : !!highlight);
@@ -619,13 +646,38 @@ function GroupTable<T extends Group>({
                   <td className="px-3 py-2 text-right text-slate-800">{money(g.icms)}</td>
                 </tr>
                 {!isCollapsed &&
-                  g.items.map((it) => (
-                    <tr key={g.ncm + it.item} className="border-t border-slate-50">
-                      <td className="px-3 py-2 pl-10 text-slate-600">{it.item}</td>
-                      <td className="px-3 py-2 text-right text-slate-500">{money(it.contabil)}</td>
-                      <td className="px-3 py-2 text-right text-slate-500">{money(it.icms)}</td>
-                    </tr>
-                  ))}
+                  g.items.map((it) => {
+                    const decided = decisions?.get(normKey(g.ncm, it.item));
+                    return (
+                      <tr key={g.ncm + it.item} className="border-t border-slate-50">
+                        <td className="px-3 py-2 pl-10 text-slate-600">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{it.item}</span>
+                            {decided !== undefined && onUndo && onSwitch && (
+                              <span className="flex items-center gap-1">
+                                <button
+                                  onClick={() => onSwitch(g.ncm, it.item, !decided)}
+                                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition"
+                                  title="Trocar classificação sem passar por Pendentes"
+                                >
+                                  Mover p/ {decided ? "Tributado" : "Alíquota zero"}
+                                </button>
+                                <button
+                                  onClick={() => onUndo(g.ncm, it.item)}
+                                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 transition"
+                                  title="Volta para Pendentes"
+                                >
+                                  Desfazer
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-500">{money(it.contabil)}</td>
+                        <td className="px-3 py-2 text-right text-slate-500">{money(it.icms)}</td>
+                      </tr>
+                    );
+                  })}
               </Fragment>
             );
           })}

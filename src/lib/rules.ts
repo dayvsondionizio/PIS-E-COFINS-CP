@@ -253,7 +253,7 @@ export async function buildResultWorkbook(result: ProcessResult): Promise<Blob> 
   const wb = new ExcelJS.Workbook();
   addCombinedSheet(wb, result.marcados, result.normais);
   addGroupSheet(wb, "Marcados", result.marcados, true);
-  addGroupSheet(wb, "Conhecidos-Normais", result.normais, false);
+  addGroupSheet(wb, "Conhecidos-Tributado", result.normais, false);
 
   const wsP = wb.addWorksheet("Pendentes Reais");
   wsP.columns = [
