@@ -37,6 +37,17 @@ function buildFileName(base: string, empresa: string, competencia: string) {
   return `${parts.join("_")}.xlsx`;
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function buildTimestampedFileName(base: string) {
+  const now = new Date();
+  const data = `${pad2(now.getDate())}-${pad2(now.getMonth() + 1)}-${now.getFullYear()}`;
+  const hora = `${pad2(now.getHours())}-${pad2(now.getMinutes())}`;
+  return `${base}_${data}_${hora}.xlsx`;
+}
+
 export default function App() {
   const [baseFile, setBaseFile] = useState<File | null>(null);
   const [rawFile, setRawFile] = useState<File | null>(null);
@@ -131,7 +142,7 @@ export default function App() {
   async function handleDownloadUpdatedBase() {
     if (!result || !rules) return;
     const blob = await buildUpdatedBase(rules, result.pendentes, decisions);
-    downloadBlob(blob, buildFileName("Base_Regras_Atualizada", empresa, competencia));
+    downloadBlob(blob, buildTimestampedFileName("Base_Regras_Atualizada"));
   }
 
   const decidedCount = decisions.size;
@@ -419,7 +430,7 @@ export default function App() {
                   >
                     Baixar base atualizada ({decidedCount} nova(s) regra(s))
                   </button>
-                  <p className="text-[11px] text-slate-400 mt-1 pl-1">{buildFileName("Base_Regras_Atualizada", empresa, competencia)}</p>
+                  <p className="text-[11px] text-slate-400 mt-1 pl-1">{buildTimestampedFileName("Base_Regras_Atualizada")}</p>
                 </div>
               </div>
             </div>
