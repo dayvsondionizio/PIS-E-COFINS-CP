@@ -60,8 +60,10 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [empresa, setEmpresa] = useState("");
   const [competencia, setCompetencia] = useState("");
+  const [pendentesPage, setPendentesPage] = useState(1);
 
   const searchNorm = search.trim().toUpperCase();
+  const PENDENTES_PAGE_SIZE = 200;
 
   const displayResult = useMemo(() => (result ? applyDecisions(result, decisions) : null), [result, decisions]);
 
@@ -81,6 +83,17 @@ export default function App() {
     );
   }, [displayResult, searchNorm]);
 
+  const pendentesTotalPages = Math.max(1, Math.ceil(filteredPendentes.length / PENDENTES_PAGE_SIZE));
+  const pendentesCurrentPage = Math.min(pendentesPage, pendentesTotalPages);
+  const pagedPendentes = useMemo(
+    () =>
+      filteredPendentes.slice(
+        (pendentesCurrentPage - 1) * PENDENTES_PAGE_SIZE,
+        pendentesCurrentPage * PENDENTES_PAGE_SIZE
+      ),
+    [filteredPendentes, pendentesCurrentPage]
+  );
+
   function filterGroups<T extends { ncm: string; items: { item: string }[] }>(groups: T[]): T[] {
     if (!searchNorm) return groups;
     return groups
@@ -92,6 +105,16 @@ export default function App() {
       })
       .filter((g): g is T => g !== null);
   }
+
+  const filteredMarcados = useMemo(
+    () => filterGroups(displayResult?.marcados ?? []),
+    [displayResult, searchNorm]
+  );
+  const filteredNormais = useMemo(
+    () => filterGroups(displayResult?.normais ?? []),
+    [displayResult, searchNorm]
+  );
+  const filteredCombined = useMemo(() => filterGroups(combinedGroups), [combinedGroups, searchNorm]);
 
   const totals = useMemo(() => {
     if (!displayResult) return null;
@@ -292,14 +315,20 @@ export default function App() {
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPendentesPage(1);
+                  }}
                   placeholder="Pesquisar por NCM ou nome do item..."
                   className="flex-1 min-w-[220px] rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2"
                   style={{ boxShadow: search ? `0 0 0 2px rgba(240,180,41,0.3)` : undefined }}
                 />
                 {search && (
                   <button
-                    onClick={() => setSearch("")}
+                    onClick={() => {
+                      setSearch("");
+                      setPendentesPage(1);
+                    }}
                     className="text-xs font-semibold text-slate-500 hover:text-slate-700 px-2 py-1"
                   >
                     Limpar busca
@@ -311,19 +340,47 @@ export default function App() {
                   Pendentes ({filteredPendentes.length})
                 </TabButton>
                 <TabButton active={tab === "completo"} onClick={() => setTab("completo")}>
-                  Completo ({filterGroups(combinedGroups).length})
+                  Completo ({filteredCombined.length})
                 </TabButton>
                 <TabButton active={tab === "marcados"} onClick={() => setTab("marcados")}>
-                  Marcados ({filterGroups(displayResult.marcados).length})
+                  Marcados ({filteredMarcados.length})
                 </TabButton>
                 <TabButton active={tab === "normais"} onClick={() => setTab("normais")}>
-                  Conhecidos-Tributado ({filterGroups(displayResult.normais).length})
+                  Conhecidos-Tributado ({filteredNormais.length})
                 </TabButton>
               </div>
 
               <div className="p-4">
                 {tab === "pendentes" && (
                   <div className="overflow-x-auto rounded-xl border border-slate-100">
+                    {filteredPendentes.length > 0 && (
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 bg-slate-50/60 text-xs text-slate-500">
+                        <span>
+                          Mostrando {(pendentesCurrentPage - 1) * PENDENTES_PAGE_SIZE + 1}–
+                          {Math.min(pendentesCurrentPage * PENDENTES_PAGE_SIZE, filteredPendentes.length)} de{" "}
+                          {filteredPendentes.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setPendentesPage((p) => Math.max(1, p - 1))}
+                            disabled={pendentesCurrentPage <= 1}
+                            className="font-semibold px-2 py-1 rounded disabled:opacity-30 hover:bg-slate-200 transition"
+                          >
+                            ← Anterior
+                          </button>
+                          <span className="font-semibold">
+                            Página {pendentesCurrentPage} de {pendentesTotalPages}
+                          </span>
+                          <button
+                            onClick={() => setPendentesPage((p) => Math.min(pendentesTotalPages, p + 1))}
+                            disabled={pendentesCurrentPage >= pendentesTotalPages}
+                            className="font-semibold px-2 py-1 rounded disabled:opacity-30 hover:bg-slate-200 transition"
+                          >
+                            Próxima →
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
@@ -335,7 +392,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredPendentes.map((p) => {
+                        {pagedPendentes.map((p) => {
                           const k = normKey(p.ncm, p.item);
                           const decision = decisions.get(k);
                           return (
@@ -385,7 +442,8 @@ export default function App() {
 
                 {tab === "completo" && (
                   <GroupTable
-                    groups={filterGroups(combinedGroups)}
+                    key={`completo-${searchNorm}`}
+                    groups={filteredCombined}
                     highlight={(g) => g.highlight}
                     decisions={decisions}
                     onUndo={(ncm, item) => setDecision(ncm, item, undefined)}
@@ -394,7 +452,8 @@ export default function App() {
                 )}
                 {tab === "marcados" && (
                   <GroupTable
-                    groups={filterGroups(displayResult.marcados)}
+                    key={`marcados-${searchNorm}`}
+                    groups={filteredMarcados}
                     highlight
                     decisions={decisions}
                     onUndo={(ncm, item) => setDecision(ncm, item, undefined)}
@@ -403,7 +462,8 @@ export default function App() {
                 )}
                 {tab === "normais" && (
                   <GroupTable
-                    groups={filterGroups(displayResult.normais)}
+                    key={`normais-${searchNorm}`}
+                    groups={filteredNormais}
                     decisions={decisions}
                     onUndo={(ncm, item) => setDecision(ncm, item, undefined)}
                     onSwitch={(ncm, item, value) => setDecision(ncm, item, value)}
@@ -598,7 +658,10 @@ function GroupTable<T extends Group>({
   onUndo?: (ncm: string, item: string) => void;
   onSwitch?: (ncm: string, item: string, value: boolean) => void;
 }) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Começa tudo recolhido: com milhares de itens, expandir tudo de cara travava o navegador.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(groups.map((g) => g.ncm)));
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 100;
   const isHighlighted = (g: T) => (typeof highlight === "function" ? highlight(g) : !!highlight);
 
   function toggle(ncm: string) {
@@ -611,17 +674,47 @@ function GroupTable<T extends Group>({
   }
 
   const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.ncm));
+  const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageGroups = groups.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-100">
       {groups.length > 0 && (
-        <div className="flex justify-end px-3 py-2 border-b border-slate-100 bg-slate-50/60">
-          <button
-            onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.ncm)))}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-700"
-          >
-            {allCollapsed ? "Expandir tudo" : "Recolher tudo"}
-          </button>
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 bg-slate-50/60 text-xs text-slate-500">
+          <span>
+            Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, groups.length)} de{" "}
+            {groups.length} NCM
+          </span>
+          <div className="flex items-center gap-3">
+            {totalPages > 1 && (
+              <>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="font-semibold px-2 py-1 rounded disabled:opacity-30 hover:bg-slate-200 transition"
+                >
+                  ← Anterior
+                </button>
+                <span className="font-semibold">
+                  Página {currentPage} de {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="font-semibold px-2 py-1 rounded disabled:opacity-30 hover:bg-slate-200 transition"
+                >
+                  Próxima →
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.ncm)))}
+              className="font-semibold hover:text-slate-700"
+            >
+              {allCollapsed ? "Expandir tudo" : "Recolher tudo"}
+            </button>
+          </div>
         </div>
       )}
       <table className="w-full text-sm">
@@ -633,7 +726,7 @@ function GroupTable<T extends Group>({
           </tr>
         </thead>
         <tbody>
-          {groups.map((g) => {
+          {pageGroups.map((g) => {
             const isCollapsed = collapsed.has(g.ncm);
             return (
               <Fragment key={g.ncm}>
